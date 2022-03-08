@@ -520,7 +520,7 @@ func (cl *Client) EndAndBeginTransaction(
 				return
 			}
 			cl.producer.inTxn = true
-			cl.cfg.logger.Log(LogLevelInfo, "beginning transaction", "transactional_id", *cl.cfg.txnID)
+			cl.cfg.logger.Log(LogLevelDebug, "beginning transaction", "transactional_id", *cl.cfg.txnID)
 		}
 	}()
 
@@ -566,11 +566,15 @@ func (cl *Client) EndAndBeginTransaction(
 				anyAdded = true
 			}
 		}
+		if !cl.producer.lastRoll.IsZero() && time.Since(cl.producer.lastRoll) > cl.cfg.txnTimeout/2 {
+			// We have to roll the transaction otherwise it will be aborted and get us fenced
+			anyAdded = true
+		}
 	}
 
 	// EndTxn when no txn was started returns INVALID_TXN_STATE.
 	if !anyAdded {
-		cl.cfg.logger.Log(LogLevelInfo, "no records were produced during the commit; thus no transaction was began; ending without doing anything")
+		cl.cfg.logger.Log(LogLevelDebug, "no records were produced during the commit; thus no transaction was began; ending without doing anything")
 		return nil
 	}
 
@@ -610,6 +614,7 @@ func (cl *Client) EndAndBeginTransaction(
 		return err
 	}
 	unblockPromises()
+	cl.producer.lastRoll = time.Now()
 
 	// If we are end/beginning unsafely, then we need to re-add all
 	// partitions to a new transaction immediately. Timing makes it
@@ -868,13 +873,8 @@ func (cl *Client) doWithConcurrentTransactions(name string, fn func() error) err
 	backoff := cl.cfg.txnBackoff
 start:
 	err := fn()
-	if errors.Is(err, kerr.ConcurrentTransactions) && time.Since(start) < 5*time.Second {
+	if (errors.Is(err, kerr.ConcurrentTransactions) || errors.Is(err, kerr.InvalidTxnState)) && time.Since(start) < 5*time.Second {
 		tries++
-		cl.cfg.logger.Log(LogLevelDebug, fmt.Sprintf("%s failed with CONCURRENT_TRANSACTIONS, which may be because we ended a txn and began producing in a new txn too quickly; backing off and retrying", name),
-			"backoff", backoff,
-			"since_request_tries_start", time.Since(start),
-			"tries", tries,
-		)
 		select {
 		case <-time.After(backoff):
 		case <-cl.ctx.Done():

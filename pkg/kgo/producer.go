@@ -58,8 +58,9 @@ type producer struct {
 	batchPromises ringBatchPromise
 	promisesMu    sync.Mutex
 
-	txnMu sync.Mutex
-	inTxn bool
+	txnMu    sync.Mutex
+	inTxn    bool
+	lastRoll time.Time
 }
 
 // BufferedProduceRecords returns the number of records currently buffered for
@@ -396,13 +397,14 @@ func (cl *Client) produce(
 }
 
 type batchPromise struct {
-	baseOffset int64
-	pid        int64
-	epoch      int16
-	attrs      RecordAttrs
-	partition  int32
-	recs       []promisedRec
-	err        error
+	baseOffset     int64
+	pid            int64
+	epoch          int16
+	attrs          RecordAttrs
+	partition      int32
+	recs           []promisedRec
+	addedToTxnBool *atomicBool
+	err            error
 }
 
 func (p *producer) promiseBatch(b batchPromise) {
@@ -429,6 +431,7 @@ start:
 		cl.finishRecordPromise(pr, b.err)
 		b.recs[i] = promisedRec{}
 	}
+	b.addedToTxnBool.set(true)
 	p.promisesMu.Unlock()
 	if cap(b.recs) > 4 {
 		cl.prsPool.put(b.recs)

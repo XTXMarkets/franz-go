@@ -859,10 +859,11 @@ func (cl *Client) finishBatch(batch *recBatch, producerID int64, producerEpoch i
 		// corresponding to our own RecordAttr's bit 8 being no
 		// timestamp type. Thus, we can directly convert the batch
 		// attrs to our own RecordAttrs.
-		attrs:     RecordAttrs{uint8(attrs)},
-		partition: partition,
-		recs:      records,
-		err:       err,
+		attrs:          RecordAttrs{uint8(attrs)},
+		partition:      partition,
+		recs:           records,
+		addedToTxnBool: &batch.owner.addedToTxn,
+		err:            err,
 	})
 }
 
