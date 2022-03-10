@@ -566,10 +566,11 @@ func (cl *Client) EndAndBeginTransaction(
 				anyAdded = true
 			}
 		}
-		if !cl.producer.lastRoll.IsZero() && time.Since(cl.producer.lastRoll) > cl.cfg.txnTimeout/2 {
-			// We have to roll the transaction otherwise it will be aborted and get us fenced
-			anyAdded = true
-		}
+	}
+
+	if !anyAdded && !cl.producer.lastRoll.IsZero() && time.Since(cl.producer.lastRoll) > cl.cfg.txnTimeout/2 {
+		// We have to roll the transaction otherwise it will be aborted and get us fenced
+		anyAdded = true
 	}
 
 	// EndTxn when no txn was started returns INVALID_TXN_STATE.

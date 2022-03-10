@@ -431,7 +431,9 @@ start:
 		cl.finishRecordPromise(pr, b.err)
 		b.recs[i] = promisedRec{}
 	}
-	b.addedToTxnBool.set(true)
+	if b.addedToTxnBool != nil {
+		b.addedToTxnBool.set(true)
+	}
 	p.promisesMu.Unlock()
 	if cap(b.recs) > 4 {
 		cl.prsPool.put(b.recs)
